@@ -1,42 +1,3 @@
-/*
- ╔══════════════════════════════════════════════════════╗
- ║   ZoneCast NEXUS — ESP32 Smart Zone Node v3.0        ║
- ║   HackArena'26 · IoT & Smart Infrastructure Domain   ║
- ╚══════════════════════════════════════════════════════╝
- 
- FEATURES:
-  ✓ MQTT with QoS 1 — guaranteed delivery
-  ✓ OLED display with animated boot screen
-  ✓ Multi-severity buzzer patterns (3 levels)
-  ✓ DFPlayer Mini voice announcements (optional)
-  ✓ RGB LED status indicator via WS2812 NeoPixel
-  ✓ Auto-reconnect WiFi + MQTT with exponential backoff
-  ✓ JSON alert parsing with ArduinoJson
-  ✓ Heartbeat status publishing every 30s
-  ✓ CLEAR command support
-  ✓ Persistent alert display with scrolling text
-  ✓ Physical ACK button (confirms receipt)
-  ✓ Device health metrics (uptime, RSSI, free heap)
-
- HARDWARE (per zone node):
-  ─ ESP32 DevKit V1 (38-pin)
-  ─ SSD1306 OLED 128×64 (I2C: SDA=21, SCL=22)
-  ─ Active Buzzer → GPIO25 via BC547 NPN transistor
-  ─ WS2812B NeoPixel LED (optional) → GPIO27
-  ─ Push button (ACK) → GPIO34 (INPUT_PULLUP)
-  ─ DFPlayer Mini (optional, UART2) → GPIO16/17
-
- ARDUINO LIBRARIES (install via Library Manager):
-  ─ PubSubClient by Nick O'Leary
-  ─ Adafruit SSD1306 + Adafruit GFX Library
-  ─ ArduinoJson by Benoit Blanchon
-  ─ Adafruit NeoPixel (if using RGB LED)
-  ─ DFRobotDFPlayerMini (if using voice)
-*/
-
-// ─────────────────────────────────────────────────────
-//  LIBRARY INCLUDES
-// ─────────────────────────────────────────────────────
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <Wire.h>
@@ -51,8 +12,8 @@
 // ─────────────────────────────────────────────────────
 //  ★ CONFIGURE THESE FOR EACH DEVICE ★
 // ─────────────────────────────────────────────────────
-#define WIFI_SSID       "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID       "Atharva"
+#define WIFI_PASSWORD   "11111111"
 #define MQTT_BROKER     "broker.hivemq.com"
 #define MQTT_PORT       1883
 #define MQTT_PREFIX     "zonecast"
@@ -66,10 +27,10 @@
 // ─────────────────────────────────────────────────────
 //  PIN MAP
 // ─────────────────────────────────────────────────────
-#define PIN_BUZZER      25    // NPN transistor base via 1kΩ
+#define PIN_BUZZER      5    // NPN transistor base via 1kΩ
 #define PIN_ACK_BTN     34    // Acknowledge button (INPUT_PULLUP)
-#define PIN_LED_RED     26    // Status LED red
-#define PIN_LED_GREEN   27    // Status LED green (or NeoPixel data)
+#define PIN_LED_RED     4    // Status LED red
+#define PIN_LED_GREEN   2    // Status LED green (or NeoPixel data)
 
 // OLED
 #define OLED_SDA        21
