@@ -1,3 +1,6 @@
+// Team Endeavor
+// Date: 05/03/2026
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
