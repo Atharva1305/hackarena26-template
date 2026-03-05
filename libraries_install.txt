@@ -1,0 +1,153 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║   ZONECAST NEXUS — Arduino Library Installation Guide               ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+REQUIRED LIBRARIES (install all 4 before uploading firmware)
+══════════════════════════════════════════════════════════════
+
+Library 1: PubSubClient
+  Author:  Nick O'Leary
+  Purpose: MQTT communication — sends and receives alert messages
+  Version: 2.8 or higher
+  
+  Install via Arduino IDE:
+    Sketch → Include Library → Manage Libraries
+    Search: PubSubClient
+    Click INSTALL
+
+  Install via Arduino CLI:
+    arduino-cli lib install "PubSubClient"
+
+────────────────────────────────────────────────────────────────────
+
+Library 2: Adafruit SSD1306
+  Author:  Adafruit
+  Purpose: Controls the OLED display
+  Version: 2.5 or higher
+  
+  Install via Arduino IDE:
+    Sketch → Include Library → Manage Libraries
+    Search: Adafruit SSD1306
+    Click INSTALL
+    ⚠ When asked "Install all dependencies?" → click YES
+
+  Note: This will also install Adafruit GFX Library automatically.
+
+────────────────────────────────────────────────────────────────────
+
+Library 3: Adafruit GFX Library
+  Author:  Adafruit
+  Purpose: Graphics toolkit (needed by SSD1306 — usually auto-installed)
+  Version: 1.11 or higher
+  
+  Install via Arduino IDE:
+    Sketch → Include Library → Manage Libraries
+    Search: Adafruit GFX
+    Click INSTALL (if not already installed by SSD1306)
+
+────────────────────────────────────────────────────────────────────
+
+Library 4: ArduinoJson
+  Author:  Benoit Blanchon
+  Purpose: Parses JSON messages from MQTT broker
+  Version: 6.x or higher (NOT version 5.x — different syntax!)
+  
+  Install via Arduino IDE:
+    Sketch → Include Library → Manage Libraries
+    Search: ArduinoJson
+    IMPORTANT: Install version 6.x, not 5.x
+    Click INSTALL
+
+────────────────────────────────────────────────────────────────────
+
+OPTIONAL LIBRARIES (for advanced features)
+══════════════════════════════════════════════════════════════
+
+Library 5: Adafruit NeoPixel
+  Purpose: RGB LED status indicator (WS2812B)
+  Install: Search "Adafruit NeoPixel" in Library Manager
+
+Library 6: DFRobotDFPlayerMini  
+  Purpose: MP3 voice announcements via DFPlayer Mini module
+  Install: Search "DFRobotDFPlayerMini" in Library Manager
+
+════════════════════════════════════════════════════════════════════
+
+ESP32 BOARD SUPPORT INSTALLATION
+══════════════════════════════════════════════════════════════
+
+Step 1: File → Preferences → Additional Boards Manager URLs
+  Paste this URL:
+  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+Step 2: Tools → Board → Boards Manager
+  Search: esp32
+  Install: "esp32 by Espressif Systems" (this is ~300MB, be patient)
+
+Step 3: Select your board:
+  Tools → Board → ESP32 Arduino → ESP32 Dev Module
+
+Step 4: Select your port:
+  Tools → Port → (choose your COM port)
+  Windows: COM3, COM4, COM5, etc.
+  Mac:     /dev/cu.usbserial-XXXX
+  Linux:   /dev/ttyUSB0
+
+════════════════════════════════════════════════════════════════════
+
+USB DRIVER INSTALLATION
+══════════════════════════════════════════════════════════════
+
+Most ESP32 DevKit boards use one of these USB chips:
+
+CH340 Driver (most common):
+  Windows: Search "CH340 driver download" — install WCH driver
+  Mac:     Download from wch-ic.com/downloads/CH341SER_MAC_ZIP.html
+  Linux:   Usually built-in, check with: ls /dev/ttyUSB*
+
+CP2102 Driver (Silicon Labs):
+  All OS:  Download from silabs.com/developers/usb-to-uart-bridge-vcp-drivers
+
+How to check which chip your ESP32 has:
+  Look at the small IC chip near the USB port on the ESP32 board.
+  It will be labeled "CH340" or "CP2102" or "CP2104"
+
+════════════════════════════════════════════════════════════════════
+
+PYTHON DEPENDENCIES (for mqtt_test.py and mqtt_simulator.py)
+══════════════════════════════════════════════════════════════
+
+Install Python 3.8+ from python.org
+
+Then install paho-mqtt:
+  pip install paho-mqtt
+
+Or on some systems:
+  pip3 install paho-mqtt
+
+Verify installation:
+  python -c "import paho.mqtt; print('OK')"
+
+════════════════════════════════════════════════════════════════════
+
+VERIFY EVERYTHING IS WORKING
+══════════════════════════════════════════════════════════════
+
+1. Open Arduino IDE
+2. Open zonecast_nexus_firmware.ino
+3. Edit WIFI_SSID and WIFI_PASSWORD
+4. Select board: ESP32 Dev Module
+5. Select port: your COM port
+6. Click Verify (checkmark icon)
+   → Should show "Done compiling" with no errors
+7. Click Upload (arrow icon)
+   → Should show "Done uploading"
+8. Open Serial Monitor (115200 baud)
+   → Should show boot messages and "Ready for alerts"
+
+If you see errors at step 6, the most common causes:
+  - Library not installed: install the missing library
+  - Wrong board: make sure ESP32 Dev Module is selected
+  - Syntax error from editing: undo your changes and try again
+
+════════════════════════════════════════════════════════════════════
