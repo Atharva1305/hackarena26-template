@@ -22,6 +22,8 @@ import time
 import threading
 import os
 import platform
+import uuid
+import random
 from datetime import datetime
 
 # ──────────────────────────────────────────────────────────────────
@@ -539,11 +541,19 @@ def run_simulator(selected_zones, voice_enabled):
 
     for zone_info in selected_zones:
         device    = ZoneDevice(zone_info, voice_enabled=voice_enabled)
-        client_id = f"SIM_{zone_info['device_id']}_{int(time.time() * 1000) % 100000}"
+        client_id = f"ZC_{zone_info['id']}_{uuid.uuid4().hex[:8]}"
         client    = mqtt.Client(client_id=client_id, clean_session=True)
+        client.reconnect_delay_set(min_delay=3, max_delay=30)
 
         def make_callbacks(dev):
             def on_connect(c, ud, flags, rc):
+                RC_CODES = {
+                    1: "Wrong protocol version",
+                    2: "Client ID rejected",
+                    3: "Broker unavailable",
+                    4: "Bad credentials",
+                    5: "Not authorized (too many connections - will retry)",
+                }
                 if rc == 0:
                     c.subscribe(f"{PREFIX}/{dev.zone['id']}/alert", 1)
                     c.subscribe(f"{PREFIX}/all/alert", 1)
@@ -551,7 +561,8 @@ def run_simulator(selected_zones, voice_enabled):
                     dev.publish_status("online")
                     print_boot_screen(dev.zone)
                 else:
-                    print(f"  [{now()}] {dev.zone['device_id']}  connect failed  rc={rc}")
+                    reason = RC_CODES.get(rc, f"Unknown error rc={rc}")
+                    print(f"  [{now()}] {dev.zone['device_id']}  connect failed: {reason}")
 
             def on_message(c, ud, msg):
                 dev.on_alert(msg.payload.decode())
@@ -559,7 +570,15 @@ def run_simulator(selected_zones, voice_enabled):
             def on_disconnect(c, ud, rc):
                 dev.status = "offline"
                 if rc != 0:
-                    print(f"  [{now()}] {dev.zone['device_id']}  disconnected unexpectedly")
+                    wait = random.randint(5, 15)
+                    print(f"  [{now()}] {dev.zone['device_id']}  disconnected (rc={rc}) - reconnecting in {wait}s")
+                    def _reconnect():
+                        time.sleep(wait)
+                        try:
+                            c.reconnect()
+                        except Exception as e:
+                            print(f"  [{now()}] {dev.zone['device_id']}  reconnect failed: {e}")
+                    threading.Thread(target=_reconnect, daemon=True).start()
 
             return on_connect, on_message, on_disconnect
 
@@ -574,7 +593,7 @@ def run_simulator(selected_zones, voice_enabled):
             client.connect(BROKER, PORT, keepalive=60)
             client.loop_start()
             clients.append(client)
-            time.sleep(0.4)
+            time.sleep(1.5)  # HiveMQ rate limit: stagger connections
         except Exception as e:
             print(f"  [ERROR] Could not connect {zone_info['device_id']}: {e}")
 
