@@ -5,17 +5,20 @@
 
 ## Team Details
 
-- **Team Name:**
-- **Members:**
-- **Domain:**
+- **Team Name: Team Endeavor**
+- **Members: Atharva Bhagwat, Parth Bujade, Payal Kainge, Om Shelke**
+- **Domain: IoT & Smart Infrastructure**
 
 ---
 
 ## Project
 
-**Problem:** 
+**Problem: ZoneCast Emergency** 
 
-**Solution:** 
+**Solution: IoT-based emergency communication system
+Sends zone-specific alerts (text + voice)
+Uses ESP32 devices for real-time notification
+Centralized control via dashboard** 
 
 ---
 
