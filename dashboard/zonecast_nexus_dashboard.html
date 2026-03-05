@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZoneCast NEXUS — Emergency Command Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --void: #020408;
+  --deep: #05080f;
+  --surface: #080d18;
+  --panel: #0a1020;
+  --border: #0f1e35;
+  --border2: #162840;
+  --cyan: #00f5ff;
+  --cyan-dim: rgba(0,245,255,0.15);
+  --red: #ff2442;
+  --red-dim: rgba(255,36,66,0.15);
+  --amber: #ffaa00;
+  --amber-dim: rgba(255,170,0,0.12);
+  --green: #00ff88;
+  --green-dim: rgba(0,255,136,0.12);
+  --blue: #4488ff;
+  --blue-dim: rgba(68,136,255,0.12);
+  --magenta: #ff44cc;
+  --text: #b8cce0;
+  --text-dim: #3d5a72;
+  --text-mid: #6a8ba8;
+  --orb: 'Orbitron', monospace;
+  --raj: 'Rajdhani', sans-serif;
+  --mono: 'Share Tech Mono', monospace;
+  --glow-cyan: 0 0 20px rgba(0,245,255,0.4), 0 0 60px rgba(0,245,255,0.15);
+  --glow-red:  0 0 20px rgba(255,36,66,0.5),  0 0 60px rgba(255,36,66,0.2);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--raj);
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: crosshair;
+}
+
+/* ── SCANLINE OVERLAY ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+}
+
+/* ── ANIMATED BG ── */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+
+/* ── BOOT SCREEN ── */
+#boot {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--void);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 24px;
+  transition: opacity 0.8s ease;
+}
+#boot.hidden { opacity: 0; pointer-events: none; }
+.boot-logo {
+  font-family: var(--orb);
+  font-size: clamp(32px, 5vw, 64px);
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  animation: bootPulse 0.5s ease infinite alternate;
+}
+@keyframes bootPulse { from { opacity: 0.7; } to { opacity: 1; } }
+.boot-sub {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: var(--text-dim);
+}
+.boot-bar-wrap {
+  width: 400px; max-width: 80vw;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.boot-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--blue));
+  width: 0%;
+  transition: width 0.1s linear;
+  box-shadow: 0 0 12px var(--cyan);
+}
+.boot-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  min-height: 16px;
+}
+
+/* ── MAIN LAYOUT ── */
+#app {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-rows: 64px 1fr;
+  min-height: 100vh;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+#app.visible { opacity: 1; }
+
+/* ── HEADER ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  background: rgba(5,8,15,0.95);
+  border-bottom: 1px solid var(--border2);
+  backdrop-filter: blur(20px);
+  position: sticky; top: 0; z-index: 100;
+}
+.h-brand {
+  display: flex; align-items: center; gap: 16px;
+}
+.h-emblem {
+  position: relative;
+  width: 42px; height: 42px;
+}
+.h-emblem svg { width: 100%; height: 100%; }
+.h-title-wrap { line-height: 1.1; }
+.h-title {
+  font-family: var(--orb);
+  font-size: 18px; font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  text-shadow: 0 0 16px rgba(0,245,255,0.5);
+}
+.h-subtitle {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 3px;
+}
+
+.h-center {
+  display: flex; align-items: center; gap: 20px;
+}
+.threat-display {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 20px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--panel);
+}
+.threat-label {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-dim); letter-spacing: 2px;
+}
+.threat-level {
+  font-family: var(--orb); font-size: 14px; font-weight: 700;
+  letter-spacing: 2px;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.threat-level.LOW    { color: var(--green); text-shadow: 0 0 12px var(--green); }
+.threat-level.MEDIUM { color: var(--amber); text-shadow: 0 0 12px var(--amber); }
+.threat-level.HIGH   { color: var(--red);   text-shadow: 0 0 12px var(--red); animation: threatBlink 0.8s infinite; }
+.threat-level.CRITICAL { color: var(--red); text-shadow: var(--glow-red); animation: threatBlink 0.4s infinite; }
+@keyframes threatBlink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.h-right {
+  display: flex; align-items: center; gap: 16px;
+}
+.conn-pill {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  font-family: var(--mono); font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.conn-pill:hover { border-color: var(--cyan); }
+.conn-pip {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-dim);
+  transition: all 0.3s;
+}
+.conn-pip.on  { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pip 2s infinite; }
+.conn-pip.err { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+@keyframes pip { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.h-clock {
+  font-family: var(--orb); font-size: 16px; font-weight: 600;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px rgba(0,245,255,0.4);
+  min-width: 90px; text-align: right;
+}
+
+/* ── BODY GRID ── */
+.body-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr 300px;
+  gap: 0;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+/* ── PANELS ── */
+.panel {
+  border-right: 1px solid var(--border);
+  background: var(--deep);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+.panel-header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.panel-title {
+  font-family: var(--orb); font-size: 10px; font-weight: 600;
+  letter-spacing: 3px; color: var(--text-mid);
+}
+.panel-body {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+.panel-body::-webkit-scrollbar { width: 3px; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border2); }
+
+/* ── CENTER COLUMN ── */
+.center-col {
+  display: flex; flex-direction: column;
+  background: var(--void);
+  overflow: hidden;
+}
+
+/* ── BUILDING VIEWER ── */
+.building-viewer {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+#buildingSvg {
+  width: 100%; height: 100%;
+}
+
+/* ── ALERT COMPOSER (bottom) ── */
+.composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--deep);
+  padding: 16px 20px;
+}
+.composer-row1 {
+  display: flex; gap: 10px; margin-bottom: 12px;
+  align-items: flex-start;
+}
+.composer-row2 {
+  display: flex; gap: 10px; align-items: center;
+}
+
+/* ── FORM ELEMENTS ── */
+.field-label {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-dim); letter-spacing: 2px;
+  margin-bottom: 6px;
+  display: block;
+}
+input[type=text], input[type=number], textarea, select {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono); font-size: 12px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(0,245,255,0.08);
+}
+select option { background: #0a1020; }
+textarea { resize: none; min-height: 60px; }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--raj); font-weight: 700; font-size: 13px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  border: none; border-radius: 4px;
+  padding: 10px 18px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-fire {
+  background: linear-gradient(135deg, #ff3322, #ff6600);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(255,50,34,0.4);
+}
+.btn-fire:hover { box-shadow: 0 0 35px rgba(255,50,34,0.7); transform: translateY(-1px); }
+.btn-fire:active { transform: translateY(0); }
+.btn-fire:disabled { opacity: 0.35; transform: none; cursor: not-allowed; }
+
+.btn-cyan {
+  background: transparent;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 12px rgba(0,245,255,0.15);
+}
+.btn-cyan:hover { background: rgba(0,245,255,0.08); box-shadow: 0 0 20px rgba(0,245,255,0.3); }
+
+.btn-ghost {
+  background: transparent; color: var(--text-mid);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { border-color: var(--text-mid); color: var(--text); }
+
+.btn-green {
+  background: transparent; color: var(--green);
+  border: 1px solid var(--green);
+  box-shadow: 0 0 12px rgba(0,255,136,0.15);
+}
+.btn-green:hover { background: rgba(0,255,136,0.08); box-shadow: 0 0 20px rgba(0,255,136,0.3); }
+
+.btn-sm { padding: 6px 12px; font-size: 11px; }
+.btn-lg { padding: 14px 28px; font-size: 15px; letter-spacing: 2px; }
+
+/* ── AI BADGE ── */
+.ai-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  background: rgba(68,136,255,0.1);
+  border: 1px solid rgba(68,136,255,0.3);
+  border-radius: 3px;
+  font-family: var(--mono); font-size: 9px;
+  color: var(--blue);
+  letter-spacing: 1px;
+}
+.ai-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--blue); animation: pip 1s infinite; }
+
+/* ── ALERT TYPE SELECTOR ── */
+.type-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  margin-bottom: 10px;
+}
+.type-chip {
+  padding: 7px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: rgba(0,0,0,0.3);
+  font-family: var(--raj); font-size: 12px; font-weight: 600;
+  cursor: pointer; text-align: center;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+.type-chip:hover { transform: translateY(-1px); }
+.type-chip.sel-FIRE     { background: rgba(255,50,34,0.2);  border-color: #ff3322; color: #ff6655; box-shadow: 0 0 12px rgba(255,50,34,0.3); }
+.type-chip.sel-QUAKE    { background: rgba(255,170,0,0.15); border-color: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,170,0,0.25); }
+.type-chip.sel-MEDICAL  { background: rgba(0,245,255,0.12); border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 12px rgba(0,245,255,0.2); }
+.type-chip.sel-SECURITY { background: rgba(255,68,204,0.12);border-color: var(--magenta); color: var(--magenta); box-shadow: 0 0 12px rgba(255,68,204,0.2); }
+.type-chip.sel-GAS      { background: rgba(255,220,0,0.12); border-color: #ffdd00; color: #ffdd00; }
+.type-chip.sel-DRILL    { background: rgba(0,255,136,0.1);  border-color: var(--green); color: var(--green); }
+
+/* ── ZONE TILES (left panel) ── */
+.zone-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+}
+.zone-item::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--border2);
+  transition: background 0.2s;
+}
+.zone-item:hover { border-color: var(--border2); transform: translateX(2px); }
+.zone-item.selected { border-color: var(--cyan); background: rgba(0,245,255,0.05); }
+.zone-item.selected::before { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.zone-item.alerting { border-color: var(--red) !important; background: rgba(255,36,66,0.08) !important; animation: zoneRing 1s infinite; }
+.zone-item.alerting::before { background: var(--red) !important; box-shadow: 0 0 8px var(--red) !important; }
+@keyframes zoneRing { 0%,100%{box-shadow:0 0 0 rgba(255,36,66,0)} 50%{box-shadow:0 0 16px rgba(255,36,66,0.3)} }
+
+.zone-row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.zone-name { font-family: var(--raj); font-size: 15px; font-weight: 700; }
+.zone-check {
+  width: 18px; height: 18px; border-radius: 3px;
+  border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: transparent;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.zone-item.selected .zone-check { background: var(--cyan); border-color: var(--cyan); color: #000; }
+.zone-desc { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 8px; }
+.zone-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zone-badge {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
+  padding: 2px 7px; border-radius: 2px;
+}
+.badge-online  { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.25); }
+.badge-offline { background: rgba(61,90,114,0.2);  color: var(--text-dim); border: 1px solid var(--border); }
+.badge-alert   { background: rgba(255,36,66,0.15); color: var(--red); border: 1px solid rgba(255,36,66,0.3); animation: pip 0.5s infinite; }
+.zone-devices  { font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-left: auto; }
+
+/* ── INCIDENT LOG (right panel) ── */
+.log-item {
+  border-left: 2px solid var(--border2);
+  padding: 8px 0 8px 12px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.log-item::before {
+  content: '';
+  position: absolute; left: -5px; top: 10px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border2);
+}
+.log-item.log-alert::before  { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.log-item.log-ok::before     { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.log-item.log-info::before   { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.log-item.log-ai::before     { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+.log-item.log-warn::before   { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.log-time  { font-family: var(--mono); font-size: 9px; color: var(--text-dim); }
+.log-title { font-family: var(--raj); font-size: 13px; font-weight: 600; margin: 2px 0; }
+.log-detail{ font-family: var(--mono); font-size: 10px; color: var(--text-mid); line-height: 1.5; }
+
+/* ── AI PANEL ── */
+.ai-panel {
+  margin: 12px 0;
+  border: 1px solid rgba(68,136,255,0.2);
+  border-radius: 6px;
+  background: rgba(68,136,255,0.05);
+  padding: 12px;
+}
+.ai-panel-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+  font-family: var(--raj); font-size: 13px; font-weight: 600;
+  color: var(--blue);
+}
+.ai-thinking {
+  display: flex; gap: 4px; align-items: center;
+}
+.ai-dot-anim {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--blue);
+  animation: dotPop 1.2s infinite;
+}
+.ai-dot-anim:nth-child(2) { animation-delay: 0.2s; }
+.ai-dot-anim:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotPop { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+.ai-response {
+  font-family: var(--mono); font-size: 11px; line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* ── METRICS ROW ── */
+.metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--border);
+  flex-shrink: 0;
+}
+.metric-box {
+  background: var(--deep);
+  padding: 10px 14px;
+  text-align: center;
+}
+.metric-val {
+  font-family: var(--orb); font-size: 22px; font-weight: 700;
+  line-height: 1;
+  transition: color 0.3s;
+}
+.metric-lbl {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-dim); letter-spacing: 2px;
+  margin-top: 3px;
+}
+
+/* ── BUILDING SVG STYLES ── */
+.floor-group { transition: opacity 0.3s; }
+.zone-room {
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.zone-room:hover .room-fill { opacity: 0.8; }
+.room-fill { transition: all 0.4s; }
+.room-label { font-family: 'Orbitron', monospace; pointer-events: none; }
+.room-label-sub { font-family: 'Share Tech Mono', monospace; pointer-events: none; }
+.device-dot {
+  transition: all 0.3s;
+}
+.alert-pulse {
+  animation: svgPulse 1s ease-out infinite;
+}
+@keyframes svgPulse {
+  0% { r: 6; opacity: 0.8; }
+  100% { r: 22; opacity: 0; }
+}
+.radar-sweep {
+  transform-origin: 400px 320px;
+  animation: radarSpin 8s linear infinite;
+}
+@keyframes radarSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── SEVERITY SELECTOR ── */
+.sev-row {
+  display: flex; gap: 6px;
+}
+.sev-btn {
+  flex: 1; padding: 7px 4px; border-radius: 4px;
+  font-family: var(--raj); font-size: 12px; font-weight: 700;
+  cursor: pointer; border: 1px solid var(--border2);
+  background: rgba(0,0,0,0.3); color: var(--text-mid);
+  transition: all 0.15s; text-align: center;
+}
+.sev-btn.sev-1.active { background: rgba(0,255,136,0.15); border-color: var(--green); color: var(--green); box-shadow: 0 0 10px rgba(0,255,136,0.2); }
+.sev-btn.sev-2.active { background: rgba(255,170,0,0.15); border-color: var(--amber); color: var(--amber); box-shadow: 0 0 10px rgba(255,170,0,0.2); }
+.sev-btn.sev-3.active { background: rgba(255,36,66,0.2);  border-color: var(--red); color: var(--red);   box-shadow: 0 0 10px rgba(255,36,66,0.3); }
+
+/* ── ALERT FLASH ── */
+#flash {
+  position: fixed; inset: 0; z-index: 998;
+  pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(255,36,66,0.12) 0%, transparent 70%);
+}
+#flash.pop { animation: flashPop 0.8s ease-out forwards; }
+@keyframes flashPop { 0%{opacity:1} 100%{opacity:0} }
+
+/* ── EMERGENCY BANNER ── */
+#emergencyBanner {
+  position: fixed; top: 64px; left: 0; right: 0; z-index: 200;
+  background: linear-gradient(90deg, var(--red), #cc0022, var(--red));
+  background-size: 200% 100%;
+  animation: bannerScroll 2s linear infinite;
+  color: #fff;
+  font-family: var(--orb); font-size: 13px; font-weight: 700;
+  letter-spacing: 3px;
+  padding: 8px 24px;
+  text-align: center;
+  display: none;
+  box-shadow: var(--glow-red);
+}
+#emergencyBanner.show { display: block; }
+@keyframes bannerScroll { 0%{background-position:0%} 100%{background-position:200%} }
+
+/* ── MQTT CONFIG MODAL ── */
+#mqttModal {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(2,4,8,0.85);
+  backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+}
+#mqttModal.show { display: flex; }
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 28px;
+  width: 420px;
+  box-shadow: 0 0 60px rgba(0,245,255,0.1);
+}
+.modal-title {
+  font-family: var(--orb); font-size: 14px; font-weight: 700;
+  letter-spacing: 3px; color: var(--cyan);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-field { margin-bottom: 14px; }
+.modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+
+/* ── ZONE SELECTION BAR ── */
+.zone-sel-bar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--deep);
+}
+.zone-count {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--cyan); margin-left: auto;
+}
+
+/* ── VOICE ANNOUNCEMENT ── */
+.voice-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-toggle:hover { border-color: var(--cyan); }
+.voice-toggle.active { border-color: var(--cyan); background: rgba(0,245,255,0.08); }
+.voice-label { font-family: var(--mono); font-size: 10px; color: var(--text-mid); }
+.voice-toggle.active .voice-label { color: var(--cyan); }
+
+/* ── SCROLL STYLED ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── STATUS INDICATOR ── */
+.status-strip {
+  display: flex; gap: 16px; align-items: center;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.strip-item {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+}
+.strip-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border2);
+}
+.strip-dot.g { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.strip-dot.r { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pip 0.5s infinite; }
+.strip-dot.a { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1200px) {
+  .body-grid { grid-template-columns: 280px 1fr 260px; }
+}
+@media (max-width: 900px) {
+  .body-grid { grid-template-columns: 1fr; }
+  .panel:first-child, .panel:last-child { display: none; }
+  .h-center { display: none; }
+}
+
+/* ── TOOLTIP ── */
+.tippy {
+  position: absolute;
+  background: var(--panel); border: 1px solid var(--border2);
+  border-radius: 4px; padding: 6px 10px;
+  font-family: var(--mono); font-size: 10px; color: var(--text);
+  pointer-events: none; z-index: 50;
+  opacity: 0; transition: opacity 0.15s;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="boot-logo">ZONECAST NEXUS</div>
+  <div class="boot-sub">EMERGENCY COMMAND INTELLIGENCE v3.0</div>
+  <div class="boot-bar-wrap"><div class="boot-bar" id="bootBar"></div></div>
+  <div class="boot-status" id="bootStatus">INITIALIZING...</div>
+</div>
+
+<!-- FLASH -->
+<div id="flash"></div>
+
+<!-- EMERGENCY BANNER -->
+<div id="emergencyBanner" id="eBanner">⚠ EMERGENCY ACTIVE — ZONECAST BROADCAST IN PROGRESS ⚠</div>
+
+<!-- MQTT MODAL -->
+<div id="mqttModal">
+  <div class="modal-box">
+    <div class="modal-title">MQTT BROKER CONFIG</div>
+    <div class="modal-field">
+      <label class="field-label">BROKER URL (WebSocket)</label>
+      <input type="text" id="mqttUrl" value="wss://broker.hivemq.com:8884/mqtt">
+    </div>
+    <div class="modal-field">
+      <label class="field-label">CLIENT ID</label>
+      <input type="text" id="mqttClientId" value="ZoneCastNEXUS_Admin">
+    </div>
+    <div class="modal-field">
+      <label class="field-label">TOPIC PREFIX</label>
+      <input type="text" id="mqttPrefix" value="zonecast">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-cyan" style="flex:1" onclick="connectMQTT()">⚡ CONNECT</button>
+      <button class="btn btn-ghost" onclick="closeMQTTModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- CANVAS BG -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- APP -->
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <div class="h-brand">
+      <div class="h-emblem">
+        <svg viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="21,2 40,12 40,30 21,40 2,30 2,12" stroke="#00f5ff" stroke-width="1.5" fill="rgba(0,245,255,0.05)"/>
+          <polygon points="21,8 34,15 34,27 21,34 8,27 8,15" stroke="#00f5ff" stroke-width="0.75" fill="none" opacity="0.4"/>
+          <circle cx="21" cy="21" r="5" fill="#00f5ff" opacity="0.9"/>
+          <circle cx="21" cy="21" r="8" stroke="#00f5ff" stroke-width="0.5" fill="none" opacity="0.5"/>
+          <line x1="21" y1="2" x2="21" y2="8" stroke="#00f5ff" stroke-width="1"/>
+          <line x1="21" y1="34" x2="21" y2="40" stroke="#00f5ff" stroke-width="1"/>
+          <line x1="2" y1="12" x2="8" y2="15" stroke="#00f5ff" stroke-width="1"/>
+          <line x1="34" y1="27" x2="40" y2="30" stroke="#00f5ff" stroke-width="1"/>
+          <line x1="40" y1="12" x2="34" y2="15" stroke="#00f5ff" stroke-width="1"/>
+          <line x1="8" y1="27" x2="2" y2="30" stroke="#00f5ff" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="h-title-wrap">
+        <div class="h-title">ZONECAST NEXUS</div>
+        <div class="h-subtitle">SMART ZONED EMERGENCY COMMAND · HACKARENA'26 · IOT DOMAIN</div>
+      </div>
+    </div>
+    <div class="h-center">
+      <div class="threat-display">
+        <span class="threat-label">THREAT</span>
+        <span class="threat-level LOW" id="threatLevel">NORMAL</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <div class="strip-item"><div class="strip-dot g" id="mqttDot"></div><span id="mqttStatus">OFFLINE</span></div>
+        <div class="strip-item" style="margin-left:8px"><div class="strip-dot g"></div><span>MQTT v3.1</span></div>
+        <div class="strip-item" style="margin-left:8px"><div class="strip-dot a"></div><span>AI ENGINE</span></div>
+      </div>
+    </div>
+    <div class="h-right">
+      <button class="conn-pill" onclick="openMQTTModal()">
+        <div class="conn-pip" id="connPip"></div>
+        <span id="connText">CONNECT BROKER</span>
+      </button>
+      <div class="h-clock" id="hClock">00:00:00</div>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <div class="body-grid">
+
+    <!-- LEFT PANEL: ZONES -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">ZONE MATRIX</span>
+        <div class="ai-badge"><div class="ai-dot"></div>AI AWARE</div>
+      </div>
+      <div class="zone-sel-bar">
+        <button class="btn btn-ghost btn-sm" onclick="selAll()">ALL</button>
+        <button class="btn btn-ghost btn-sm" onclick="selNone()">NONE</button>
+        <button class="btn btn-ghost btn-sm" onclick="selFloor(1)">F1</button>
+        <button class="btn btn-ghost btn-sm" onclick="selFloor(2)">F2</button>
+        <button class="btn btn-ghost btn-sm" onclick="selFloor(3)">F3</button>
+        <div class="zone-count"><span id="selCount">0</span> SELECTED</div>
+      </div>
+      <div class="panel-body" id="zoneList"></div>
+    </div>
+
+    <!-- CENTER: BUILDING + COMPOSER -->
+    <div class="center-col">
+      <!-- STATUS -->
+      <div class="metrics" id="metricsRow">
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--green)" id="mOnline">0</div>
+          <div class="metric-lbl">ONLINE</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--red)" id="mAlerting">0</div>
+          <div class="metric-lbl">ALERTING</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--cyan)" id="mZones">9</div>
+          <div class="metric-lbl">ZONES</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--amber)" id="mIncidents">0</div>
+          <div class="metric-lbl">INCIDENTS</div>
+        </div>
+      </div>
+
+      <!-- BUILDING VIEWER -->
+      <div class="building-viewer">
+        <svg id="buildingSvg" viewBox="0 0 800 540" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="roomGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#00f5ff" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glowStrong">
+              <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <clipPath id="buildingClip">
+              <rect x="60" y="30" width="680" height="480"/>
+            </clipPath>
+          </defs>
+
+          <!-- Background -->
+          <rect width="800" height="540" fill="#020408"/>
+
+          <!-- Grid lines -->
+          <g opacity="0.06" stroke="#00f5ff" stroke-width="0.5">
+            <line x1="0" y1="30" x2="800" y2="30"/>
+            <line x1="0" y1="180" x2="800" y2="180"/>
+            <line x1="0" y1="330" x2="800" y2="330"/>
+            <line x1="0" y1="510" x2="800" y2="510"/>
+            <line x1="60" y1="0" x2="60" y2="540"/>
+            <line x1="400" y1="0" x2="400" y2="540"/>
+            <line x1="740" y1="0" x2="740" y2="540"/>
+          </g>
+
+          <!-- Floor labels -->
+          <text x="32" y="110" font-family="Orbitron" font-size="9" fill="#3d5a72" text-anchor="middle" transform="rotate(-90 32 110)" letter-spacing="2">FLOOR 3</text>
+          <text x="32" y="260" font-family="Orbitron" font-size="9" fill="#3d5a72" text-anchor="middle" transform="rotate(-90 32 260)" letter-spacing="2">FLOOR 2</text>
+          <text x="32" y="420" font-family="Orbitron" font-size="9" fill="#3d5a72" text-anchor="middle" transform="rotate(-90 32 420)" letter-spacing="2">FLOOR 1</text>
+
+          <!-- ── FLOOR 1 ── -->
+          <!-- Zone 1 -->
+          <g class="zone-room" id="svg_zone_1" onclick="toggleZone('zone_1')">
+            <rect class="room-fill" id="fill_zone_1" x="65" y="335" width="210" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="170" y="395" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 1</text>
+            <text class="room-label-sub" x="170" y="412" font-size="9" fill="#3d5a72" text-anchor="middle">LOBBY / RECEPTION</text>
+            <circle class="device-dot" id="dev_zone_1_a" cx="120" cy="450" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_1_b" cx="145" cy="450" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 2 -->
+          <g class="zone-room" id="svg_zone_2" onclick="toggleZone('zone_2')">
+            <rect class="room-fill" id="fill_zone_2" x="280" y="335" width="225" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="392" y="395" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 2</text>
+            <text class="room-label-sub" x="392" y="412" font-size="9" fill="#3d5a72" text-anchor="middle">CAFETERIA / CANTEEN</text>
+            <circle class="device-dot" id="dev_zone_2_a" cx="340" cy="450" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_2_b" cx="365" cy="450" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_2_c" cx="390" cy="450" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 3 -->
+          <g class="zone-room" id="svg_zone_3" onclick="toggleZone('zone_3')">
+            <rect class="room-fill" id="fill_zone_3" x="510" y="335" width="225" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="622" y="395" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 3</text>
+            <text class="room-label-sub" x="622" y="412" font-size="9" fill="#3d5a72" text-anchor="middle">SERVER ROOM / IT</text>
+            <circle class="device-dot" id="dev_zone_3_a" cx="565" cy="450" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- ── FLOOR 2 ── -->
+          <!-- Zone 4 -->
+          <g class="zone-room" id="svg_zone_4" onclick="toggleZone('zone_4')">
+            <rect class="room-fill" id="fill_zone_4" x="65" y="185" width="210" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="170" y="245" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 4</text>
+            <text class="room-label-sub" x="170" y="262" font-size="9" fill="#3d5a72" text-anchor="middle">OFFICE BLOCK A</text>
+            <circle class="device-dot" id="dev_zone_4_a" cx="120" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_4_b" cx="145" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_4_c" cx="170" cy="300" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 5 -->
+          <g class="zone-room" id="svg_zone_5" onclick="toggleZone('zone_5')">
+            <rect class="room-fill" id="fill_zone_5" x="280" y="185" width="155" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="357" y="245" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 5</text>
+            <text class="room-label-sub" x="357" y="262" font-size="9" fill="#3d5a72" text-anchor="middle">CONFERENCE A</text>
+            <circle class="device-dot" id="dev_zone_5_a" cx="320" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_5_b" cx="345" cy="300" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 6 -->
+          <g class="zone-room" id="svg_zone_6" onclick="toggleZone('zone_6')">
+            <rect class="room-fill" id="fill_zone_6" x="440" y="185" width="295" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="587" y="245" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 6</text>
+            <text class="room-label-sub" x="587" y="262" font-size="9" fill="#3d5a72" text-anchor="middle">OFFICE BLOCK B + LAB</text>
+            <circle class="device-dot" id="dev_zone_6_a" cx="490" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_6_b" cx="515" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_6_c" cx="540" cy="300" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_6_d" cx="565" cy="300" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- ── FLOOR 3 ── -->
+          <!-- Zone 7 -->
+          <g class="zone-room" id="svg_zone_7" onclick="toggleZone('zone_7')">
+            <rect class="room-fill" id="fill_zone_7" x="65" y="35" width="195" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="162" y="93" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 7</text>
+            <text class="room-label-sub" x="162" y="110" font-size="9" fill="#3d5a72" text-anchor="middle">RESEARCH LAB</text>
+            <circle class="device-dot" id="dev_zone_7_a" cx="115" cy="150" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_7_b" cx="140" cy="150" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 8 -->
+          <g class="zone-room" id="svg_zone_8" onclick="toggleZone('zone_8')">
+            <rect class="room-fill" id="fill_zone_8" x="265" y="35" width="235" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="382" y="93" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 8</text>
+            <text class="room-label-sub" x="382" y="110" font-size="9" fill="#3d5a72" text-anchor="middle">MANAGEMENT FLOOR</text>
+            <circle class="device-dot" id="dev_zone_8_a" cx="310" cy="150" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_8_b" cx="335" cy="150" r="4" fill="#3d5a72"/>
+            <circle class="device-dot" id="dev_zone_8_c" cx="360" cy="150" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Zone 9 -->
+          <g class="zone-room" id="svg_zone_9" onclick="toggleZone('zone_9')">
+            <rect class="room-fill" id="fill_zone_9" x="505" y="35" width="230" height="140" rx="3" fill="rgba(0,245,255,0.04)" stroke="#0f1e35" stroke-width="1.5"/>
+            <text class="room-label" x="620" y="93" font-size="11" font-weight="700" fill="#6a8ba8" text-anchor="middle" letter-spacing="1">ZONE 9</text>
+            <text class="room-label-sub" x="620" y="110" font-size="9" fill="#3d5a72" text-anchor="middle">ROOFTOP / UTILITIES</text>
+            <circle class="device-dot" id="dev_zone_9_a" cx="555" cy="150" r="4" fill="#3d5a72"/>
+          </g>
+
+          <!-- Floor dividers -->
+          <line x1="60" y1="330" x2="740" y2="330" stroke="#0f1e35" stroke-width="2"/>
+          <line x1="60" y1="180" x2="740" y2="180" stroke="#0f1e35" stroke-width="2"/>
+
+          <!-- Stairwells -->
+          <g opacity="0.5">
+            <rect x="740" y="35" width="25" height="475" fill="none" stroke="#162840" stroke-width="1" rx="2"/>
+            <text x="752" y="280" font-family="Share Tech Mono" font-size="8" fill="#3d5a72" text-anchor="middle" transform="rotate(90 752 280)" letter-spacing="1">STAIRWELL</text>
+          </g>
+
+          <!-- Alert pulse rings (hidden until needed) -->
+          <circle class="alert-pulse" id="pulse_zone_1" cx="170" cy="405" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_2" cx="392" cy="405" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_3" cx="622" cy="405" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_4" cx="170" cy="255" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_5" cx="357" cy="255" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_6" cx="587" cy="255" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_7" cx="162" cy="105" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_8" cx="382" cy="105" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+          <circle class="alert-pulse" id="pulse_zone_9" cx="620" cy="105" r="6" fill="none" stroke="#ff2442" stroke-width="2" opacity="0" display="none"/>
+
+          <!-- Corner decorations -->
+          <g stroke="#00f5ff" stroke-width="1" opacity="0.3">
+            <polyline points="60,35 60,30 65,30"/>
+            <polyline points="735,30 740,30 740,35"/>
+            <polyline points="60,505 60,510 65,510"/>
+            <polyline points="735,510 740,510 740,505"/>
+          </g>
+          <text x="400" y="528" font-family="Share Tech Mono" font-size="9" fill="#1a2e42" text-anchor="middle" letter-spacing="3">BUILDING FLOOR PLAN — ZONECAST NEXUS — LIVE</text>
+        </svg>
+      </div>
+
+      <!-- COMPOSER -->
+      <div class="composer">
+        <div style="display:flex;gap:12px;margin-bottom:14px">
+          <div style="flex:1">
+            <div class="field-label">ALERT TYPE</div>
+            <div class="type-grid" id="typeGrid">
+              <div class="type-chip sel-FIRE" data-t="FIRE" onclick="setType('FIRE')">🔥 FIRE</div>
+              <div class="type-chip" data-t="QUAKE" onclick="setType('QUAKE')">🌍 QUAKE</div>
+              <div class="type-chip" data-t="MEDICAL" onclick="setType('MEDICAL')">🏥 MEDICAL</div>
+              <div class="type-chip" data-t="SECURITY" onclick="setType('SECURITY')">🔒 SECURITY</div>
+              <div class="type-chip" data-t="GAS" onclick="setType('GAS')">☣ GAS LEAK</div>
+              <div class="type-chip" data-t="DRILL" onclick="setType('DRILL')">📢 DRILL</div>
+            </div>
+          </div>
+          <div style="width:160px">
+            <div class="field-label">SEVERITY</div>
+            <div class="sev-row">
+              <div class="sev-btn sev-1" onclick="setSev(1)">LOW</div>
+              <div class="sev-btn sev-2" onclick="setSev(2)">MED</div>
+              <div class="sev-btn sev-3 active" onclick="setSev(3)">CRIT</div>
+            </div>
+            <div style="margin-top:10px">
+              <div class="field-label">DURATION (SEC)</div>
+              <input type="number" id="durInput" value="60" min="0" style="width:100%">
+            </div>
+          </div>
+        </div>
+        <div class="composer-row1">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div class="field-label" style="margin:0">ALERT MESSAGE</div>
+              <button class="btn btn-ghost btn-sm" onclick="aiGenerateMessage()" style="font-size:10px;padding:3px 10px;gap:5px">
+                <span style="color:var(--blue)">✦</span> AI GENERATE
+              </button>
+            </div>
+            <textarea id="alertMsg" rows="2" placeholder="Enter emergency instructions, or click AI GENERATE for intelligent auto-draft...">Evacuate immediately via nearest stairwell. Do not use elevators. Proceed to assembly point A at the main gate.</textarea>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-left:10px">
+            <div class="voice-toggle" id="voiceToggle" onclick="toggleVoice()">
+              <span style="font-size:16px">🔊</span>
+              <span class="voice-label">VOICE</span>
+            </div>
+            <div class="voice-toggle" id="mqttToggle" onclick="openMQTTModal()" style="border-color:var(--cyan);background:rgba(0,245,255,0.05)">
+              <span style="font-size:14px;color:var(--cyan)">⚡</span>
+              <span class="voice-label" style="color:var(--cyan)">MQTT</span>
+            </div>
+          </div>
+        </div>
+        <div class="composer-row2">
+          <button class="btn btn-fire btn-lg" id="broadcastBtn" onclick="broadcastAlert()" style="flex:1">
+            ⚡ BROADCAST ALERT
+          </button>
+          <button class="btn btn-green" onclick="sendClearAll()" style="padding:14px 20px">
+            ✔ ALL-CLEAR
+          </button>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:right;min-width:90px" id="targetSummary">
+            No zones<br>selected
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: LOG + AI -->
+    <div class="panel" style="border-left:1px solid var(--border);border-right:none">
+      <div class="panel-header">
+        <span class="panel-title">INCIDENT LOG</span>
+        <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 8px" onclick="clearLog()">CLEAR</button>
+      </div>
+
+      <!-- AI ASSISTANT -->
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div class="ai-badge"><div class="ai-dot"></div>AI ASSISTANT</div>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--text-dim)">CLAUDE POWERED</span>
+        </div>
+        <textarea id="aiInput" rows="2" style="font-size:11px;margin-bottom:8px" placeholder="Ask: 'Which zones need evacuation for a fire on floor 2?' or 'Draft a medical emergency message'..."></textarea>
+        <button class="btn btn-cyan" style="width:100%;font-size:11px;padding:8px" onclick="askAI()">
+          ✦ ANALYZE &amp; ADVISE
+        </button>
+        <div id="aiResponseArea"></div>
+      </div>
+
+      <div class="panel-body" id="logPanel">
+        <div class="log-item log-info">
+          <div class="log-time" id="initTime"></div>
+          <div class="log-title">SYSTEM INITIALIZED</div>
+          <div class="log-detail">ZoneCast NEXUS v3.0 online. 9 zones registered. AI engine ready.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  CONFIGURATION
+// ══════════════════════════════════════════════════════
+const API_KEY_PLACEHOLDER = ''; // Leave empty — handled by Anthropic proxy
+
+const ZONES = [
+  { id:'zone_1', name:'Zone 1', desc:'Lobby / Reception',      floor:1, devices:['dev_zone_1_a','dev_zone_1_b'] },
+  { id:'zone_2', name:'Zone 2', desc:'Cafeteria / Canteen',     floor:1, devices:['dev_zone_2_a','dev_zone_2_b','dev_zone_2_c'] },
+  { id:'zone_3', name:'Zone 3', desc:'Server Room / IT',        floor:1, devices:['dev_zone_3_a'] },
+  { id:'zone_4', name:'Zone 4', desc:'Office Block A',          floor:2, devices:['dev_zone_4_a','dev_zone_4_b','dev_zone_4_c'] },
+  { id:'zone_5', name:'Zone 5', desc:'Conference Room A',       floor:2, devices:['dev_zone_5_a','dev_zone_5_b'] },
+  { id:'zone_6', name:'Zone 6', desc:'Office Block B + Lab',    floor:2, devices:['dev_zone_6_a','dev_zone_6_b','dev_zone_6_c','dev_zone_6_d'] },
+  { id:'zone_7', name:'Zone 7', desc:'Research Laboratory',     floor:3, devices:['dev_zone_7_a','dev_zone_7_b'] },
+  { id:'zone_8', name:'Zone 8', desc:'Management Floor',        floor:3, devices:['dev_zone_8_a','dev_zone_8_b','dev_zone_8_c'] },
+  { id:'zone_9', name:'Zone 9', desc:'Rooftop / Utilities',     floor:3, devices:['dev_zone_9_a'] },
+];
+
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+let selectedZones = new Set();
+let alertingZones = new Set();
+let onlineZones   = new Set(['zone_1','zone_2','zone_4','zone_5','zone_6','zone_8']);
+let selectedType  = 'FIRE';
+let severity      = 3;
+let mqttClient    = null;
+let mqttConnected = false;
+let voiceEnabled  = false;
+let incidentCount = 0;
+
+// ══════════════════════════════════════════════════════
+//  BOOT SEQUENCE
+// ══════════════════════════════════════════════════════
+const bootSteps = [
+  'LOADING ZONE MATRIX...',
+  'INITIALIZING MQTT ENGINE...',
+  'CONNECTING AI SUBSYSTEMS...',
+  'CALIBRATING BUILDING SENSORS...',
+  'LOADING FLOOR SCHEMATICS...',
+  'ARMING BROADCAST PROTOCOLS...',
+  'SYSTEM READY.',
+];
+let bootProgress = 0;
+const bootBar    = document.getElementById('bootBar');
+const bootStatus = document.getElementById('bootStatus');
+
+function runBoot() {
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= bootSteps.length) {
+      clearInterval(interval);
+      setTimeout(() => {
+        document.getElementById('boot').classList.add('hidden');
+        document.getElementById('app').classList.add('visible');
+        initApp();
+      }, 400);
+      return;
+    }
+    bootStatus.textContent = bootSteps[i];
+    bootProgress = Math.round(((i + 1) / bootSteps.length) * 100);
+    bootBar.style.width = bootProgress + '%';
+    i++;
+  }, 280);
+}
+runBoot();
+document.getElementById('initTime').textContent = new Date().toTimeString().slice(0,8);
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+function initApp() {
+  renderZoneList();
+  updateSVGZones();
+  startClock();
+  startBGCanvas();
+  simulateHeartbeats();
+}
+
+// ══════════════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════════════
+function startClock() {
+  const el = document.getElementById('hClock');
+  setInterval(() => { el.textContent = new Date().toTimeString().slice(0,8); }, 1000);
+  el.textContent = new Date().toTimeString().slice(0,8);
+}
+
+// ══════════════════════════════════════════════════════
+//  BACKGROUND CANVAS
+// ══════════════════════════════════════════════════════
+function startBGCanvas() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx    = canvas.getContext('2d');
+  let W, H;
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const particles = Array.from({length: 60}, () => ({
+    x: Math.random() * 1000,
+    y: Math.random() * 700,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: (Math.random() - 0.5) * 0.2,
+    size: Math.random() * 1.5 + 0.5,
+    alpha: Math.random() * 0.4 + 0.1,
+  }));
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // Subtle gradient
+    const g = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)/2);
+    g.addColorStop(0, 'rgba(0,20,40,0.3)');
+    g.addColorStop(1, 'rgba(2,4,8,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x * W/1000, p.y * H/700, p.size, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(0,245,255,${p.alpha})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// ══════════════════════════════════════════════════════
+//  ZONE LIST RENDER
+// ══════════════════════════════════════════════════════
+function renderZoneList() {
+  const container = document.getElementById('zoneList');
+  container.innerHTML = '';
+  ZONES.forEach(z => {
+    const isSelected = selectedZones.has(z.id);
+    const isAlerting = alertingZones.has(z.id);
+    const isOnline   = onlineZones.has(z.id);
+    const div = document.createElement('div');
+    div.className = `zone-item${isSelected?' selected':''}${isAlerting?' alerting':''}`;
+    div.id = 'li_' + z.id;
+    div.onclick = () => toggleZone(z.id);
+    const stateClass = isAlerting ? 'badge-alert' : (isOnline ? 'badge-online' : 'badge-offline');
+    const stateText  = isAlerting ? 'ALERTING' : (isOnline ? 'ONLINE' : 'OFFLINE');
+    div.innerHTML = `
+      <div class="zone-row1">
+        <div class="zone-name">${z.name}</div>
+        <div class="zone-check">${isSelected?'✓':''}</div>
+      </div>
+      <div class="zone-desc">${z.desc} · Floor ${z.floor}</div>
+      <div class="zone-meta">
+        <span class="zone-badge ${stateClass}">${stateText}</span>
+        <span class="zone-devices">${z.devices.length} device${z.devices.length>1?'s':''}</span>
+      </div>`;
+    container.appendChild(div);
+  });
+  updateCounters();
+}
+
+// ══════════════════════════════════════════════════════
+//  ZONE TOGGLE
+// ══════════════════════════════════════════════════════
+function toggleZone(id) {
+  if (selectedZones.has(id)) selectedZones.delete(id);
+  else selectedZones.add(id);
+  renderZoneList();
+  updateSVGZones();
+  updateTargetSummary();
+}
+function selAll()     { ZONES.forEach(z=>selectedZones.add(z.id)); renderZoneList(); updateSVGZones(); updateTargetSummary(); }
+function selNone()    { selectedZones.clear(); renderZoneList(); updateSVGZones(); updateTargetSummary(); }
+function selFloor(f)  { ZONES.filter(z=>z.floor===f).forEach(z=>selectedZones.add(z.id)); renderZoneList(); updateSVGZones(); updateTargetSummary(); }
+
+function updateTargetSummary() {
+  const el = document.getElementById('targetSummary');
+  const n = selectedZones.size;
+  if (n === 0) el.innerHTML = 'No zones<br>selected';
+  else if (n === ZONES.length) el.innerHTML = `<span style="color:var(--red)">ALL ${n} ZONES</span>`;
+  else el.innerHTML = `<span style="color:var(--cyan)">${n} zone${n>1?'s':''}</span><br>targeted`;
+  document.getElementById('selCount').textContent = n;
+}
+
+// ══════════════════════════════════════════════════════
+//  SVG ZONE UPDATE
+// ══════════════════════════════════════════════════════
+const ZONE_COLORS = {
+  FIRE:     {fill:'rgba(255,50,34,0.18)',   stroke:'#ff3322', label:'#ff6655'},
+  QUAKE:    {fill:'rgba(255,170,0,0.15)',   stroke:'#ffaa00', label:'#ffcc44'},
+  MEDICAL:  {fill:'rgba(0,245,255,0.14)',   stroke:'#00f5ff', label:'#44eeff'},
+  SECURITY: {fill:'rgba(255,68,204,0.12)',  stroke:'#ff44cc', label:'#ff88dd'},
+  GAS:      {fill:'rgba(255,230,0,0.14)',   stroke:'#ffdd00', label:'#ffee44'},
+  DRILL:    {fill:'rgba(0,255,136,0.12)',   stroke:'#00ff88', label:'#44ffaa'},
+};
+
+function updateSVGZones() {
+  ZONES.forEach(z => {
+    const fill   = document.getElementById('fill_' + z.id);
+    const svg    = document.getElementById('svg_' + z.id);
+    const pulse  = document.getElementById('pulse_' + z.id);
+    const isSelected = selectedZones.has(z.id);
+    const isAlert    = alertingZones.has(z.id);
+    const isOnline   = onlineZones.has(z.id);
+
+    if (!fill) return;
+
+    if (isAlert) {
+      const c = ZONE_COLORS[selectedType] || ZONE_COLORS.FIRE;
+      fill.style.fill   = c.fill;
+      fill.style.stroke = c.stroke;
+      fill.style.strokeWidth = '2';
+      pulse && (pulse.style.display = 'block');
+      // Update label colors
+      svg.querySelectorAll('.room-label').forEach(t => t.setAttribute('fill', c.label));
+    } else if (isSelected) {
+      fill.style.fill   = 'rgba(0,245,255,0.10)';
+      fill.style.stroke = '#00f5ff';
+      fill.style.strokeWidth = '1.5';
+      pulse && (pulse.style.display = 'none');
+      svg.querySelectorAll('.room-label').forEach(t => t.setAttribute('fill', '#88ddff'));
+    } else {
+      fill.style.fill   = 'rgba(0,245,255,0.03)';
+      fill.style.stroke = '#0f1e35';
+      fill.style.strokeWidth = '1.5';
+      pulse && (pulse.style.display = 'none');
+      svg.querySelectorAll('.room-label').forEach(t => t.setAttribute('fill', '#6a8ba8'));
+    }
+
+    // Device dots
+    z.devices.forEach(devId => {
+      const dot = document.getElementById(devId);
+      if (!dot) return;
+      if (isAlert)       { dot.setAttribute('fill','#ff2442'); dot.setAttribute('r','5'); dot.style.filter='drop-shadow(0 0 4px #ff2442)'; }
+      else if (isOnline) { dot.setAttribute('fill','#00ff88'); dot.setAttribute('r','4'); dot.style.filter='drop-shadow(0 0 4px #00ff88)'; }
+      else               { dot.setAttribute('fill','#3d5a72'); dot.setAttribute('r','4'); dot.style.filter='none'; }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  TYPE / SEVERITY
+// ══════════════════════════════════════════════════════
+function setType(t) {
+  selectedType = t;
+  document.querySelectorAll('.type-chip').forEach(c => {
+    c.className = `type-chip${c.dataset.t === t ? (' sel-'+t) : ''}`;
+  });
+  // Auto-load template message
+  const msgs = {
+    FIRE:     'FIRE EMERGENCY! Evacuate immediately via nearest stairwell. Do not use elevators. Proceed to assembly point A at the main gate. Keep low to avoid smoke.',
+    QUAKE:    'EARTHQUAKE ALERT! DROP, COVER, AND HOLD ON. Move away from windows. Take cover under sturdy furniture. Do not attempt to run outside until shaking stops.',
+    MEDICAL:  'MEDICAL EMERGENCY in progress. Clear the area immediately and allow paramedic access. Do not block corridors. Call extension 911 for assistance.',
+    SECURITY: 'SECURITY LOCKDOWN INITIATED. Lock all doors immediately. Move away from windows. Do not open doors for anyone. Await official all-clear from security personnel.',
+    GAS:      'GAS LEAK DETECTED. Evacuate immediately. Do not operate electrical switches. Leave doors open as you exit. Assemble at designated point C, 200m from building.',
+    DRILL:    'EMERGENCY DRILL IN PROGRESS — THIS IS A TEST. Please follow all evacuation procedures to the nearest exit. Treat this as a real emergency.',
+  };
+  if (msgs[t]) document.getElementById('alertMsg').value = msgs[t];
+}
+
+function setSev(v) {
+  severity = v;
+  document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.sev-btn.sev-${v}`).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════
+//  BROADCAST ALERT
+// ══════════════════════════════════════════════════════
+function broadcastAlert() {
+  if (selectedZones.size === 0) { addLog('warn','NO ZONES SELECTED','Select at least one zone before broadcasting.'); return; }
+  const msg      = document.getElementById('alertMsg').value.trim();
+  const duration = (parseInt(document.getElementById('durInput').value) || 60) * 1000;
+  const prefix   = document.getElementById('mqttPrefix').value || 'zonecast';
+
+  if (!msg) { addLog('warn','EMPTY MESSAGE','Enter an alert message.'); return; }
+
+  const payload = JSON.stringify({ type: selectedType, message: msg, severity, duration, timestamp: new Date().toISOString(), sender: 'ZoneCast_NEXUS_Admin' });
+
+  selectedZones.forEach(id => {
+    alertingZones.add(id);
+    if (mqttConnected && mqttClient) {
+      mqttClient.publish(`${prefix}/${id}/alert`, payload, { qos: 1 });
+    }
+  });
+
+  incidentCount++;
+  document.getElementById('mIncidents').textContent = incidentCount;
+
+  // Visual effects
+  flashScreen();
+  showBanner(`⚠ ${selectedType} ALERT BROADCAST — ${selectedZones.size} ZONE(S) — SEVERITY ${severity === 3 ? 'CRITICAL' : severity === 2 ? 'MEDIUM' : 'LOW'}`);
+  setThreat(severity === 3 ? 'HIGH' : severity === 2 ? 'MEDIUM' : 'LOW');
+  addLog('alert', `${selectedType} ALERT BROADCAST`, `${selectedZones.size} zone(s) targeted · Severity ${severity} · "${msg.slice(0,60)}..."`);
+
+  if (voiceEnabled) speakAlert(selectedType, msg);
+
+  renderZoneList();
+  updateSVGZones();
+  updateCounters();
+
+  // Auto-clear
+  if (duration > 0) {
+    setTimeout(() => {
+      selectedZones.forEach(id => alertingZones.delete(id));
+      renderZoneList();
+      updateSVGZones();
+      updateCounters();
+      hideBanner();
+      setThreat('LOW');
+      addLog('ok','AUTO-CLEARED',`Alert duration expired after ${duration/1000}s.`);
+    }, duration);
+  }
+}
+
+function sendClearAll() {
+  const prefix = document.getElementById('mqttPrefix').value || 'zonecast';
+  const payload = JSON.stringify({ type:'CLEAR', message:'All clear. Resume normal operations.', severity:0, duration:0, timestamp: new Date().toISOString() });
+  if (mqttConnected && mqttClient) mqttClient.publish(`${prefix}/all/alert`, payload, { qos: 1 });
+  alertingZones.clear();
+  hideBanner();
+  setThreat('NORMAL');
+  addLog('ok','ALL-CLEAR BROADCAST','Emergency cleared across all zones.');
+  renderZoneList();
+  updateSVGZones();
+  updateCounters();
+}
+
+// ══════════════════════════════════════════════════════
+//  VOICE
+// ══════════════════════════════════════════════════════
+function toggleVoice() {
+  voiceEnabled = !voiceEnabled;
+  const t = document.getElementById('voiceToggle');
+  t.classList.toggle('active', voiceEnabled);
+  addLog('info','VOICE ANNOUNCEMENT', voiceEnabled ? 'TTS enabled — alerts will be spoken aloud.' : 'TTS disabled.');
+}
+function speakAlert(type, msg) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(`Emergency alert. ${type}. ${msg}`);
+  utter.rate = 0.9; utter.pitch = 1.1; utter.volume = 1;
+  window.speechSynthesis.speak(utter);
+}
+
+// ══════════════════════════════════════════════════════
+//  MQTT
+// ══════════════════════════════════════════════════════
+function openMQTTModal()  { document.getElementById('mqttModal').classList.add('show'); }
+function closeMQTTModal() { document.getElementById('mqttModal').classList.remove('show'); }
+
+function connectMQTT() {
+  closeMQTTModal();
+  const url      = document.getElementById('mqttUrl').value;
+  const clientId = document.getElementById('mqttClientId').value + '_' + Math.random().toString(16).slice(2,6);
+  const prefix   = document.getElementById('mqttPrefix').value;
+
+  addLog('info','MQTT CONNECTING',`Connecting to ${url}...`);
+  setConnected('connecting');
+
+  try {
+    mqttClient = mqtt.connect(url, { clientId, clean: true, reconnectPeriod: 5000 });
+    mqttClient.on('connect', () => {
+      mqttConnected = true;
+      setConnected('online');
+      mqttClient.subscribe(prefix + '/status/#');
+      addLog('ok','MQTT CONNECTED',`Broker: ${url} | Subscribed to status feed.`);
+    });
+    mqttClient.on('message', (topic, payload) => {
+      try {
+        const d = JSON.parse(payload.toString());
+        if (d.zone && d.status) {
+          if (d.status === 'online')       onlineZones.add(d.zone);
+          if (d.status === 'alert_active') { onlineZones.add(d.zone); alertingZones.add(d.zone); }
+          if (d.status === 'offline')      { onlineZones.delete(d.zone); alertingZones.delete(d.zone); }
+          renderZoneList(); updateSVGZones(); updateCounters();
+          addLog('info',`DEVICE STATUS`,`${d.device_id||'?'} [${d.zone}] → ${d.status}`);
+        }
+      } catch(e) {}
+    });
+    mqttClient.on('error', err => { addLog('warn','MQTT ERROR', err.message); });
+    mqttClient.on('close', () => { mqttConnected = false; setConnected('offline'); addLog('warn','MQTT DISCONNECTED','Connection closed.'); });
+  } catch(e) { addLog('warn','CONNECTION FAILED', e.message); setConnected('offline'); }
+}
+
+function setConnected(state) {
+  const pip  = document.getElementById('connPip');
+  const text = document.getElementById('connText');
+  const dot  = document.getElementById('mqttDot');
+  const ms   = document.getElementById('mqttStatus');
+  if (state === 'online')      { pip.className='conn-pip on';  text.textContent='CONNECTED'; dot.className='strip-dot g'; ms.textContent='MQTT LIVE'; }
+  else if (state==='connecting'){ pip.className='conn-pip';    text.textContent='CONNECTING...'; dot.className='strip-dot a'; ms.textContent='CONNECTING'; }
+  else                         { pip.className='conn-pip err'; text.textContent='RECONNECT'; dot.className='strip-dot r'; ms.textContent='OFFLINE'; }
+}
+
+// ══════════════════════════════════════════════════════
+//  AI — ANTHROPIC API
+// ══════════════════════════════════════════════════════
+async function askAI() {
+  const query = document.getElementById('aiInput').value.trim();
+  if (!query) return;
+
+  const area = document.getElementById('aiResponseArea');
+  area.innerHTML = `<div class="ai-panel"><div class="ai-panel-header"><div class="ai-thinking"><div class="ai-dot-anim"></div><div class="ai-dot-anim"></div><div class="ai-dot-anim"></div></div><span>Analyzing...</span></div></div>`;
+
+  const systemPrompt = `You are an expert emergency management AI assistant for ZoneCast NEXUS, a smart zoned emergency communication system deployed in a multi-floor building.
+
+Building layout:
+- Floor 1: Zone 1 (Lobby/Reception), Zone 2 (Cafeteria), Zone 3 (Server Room/IT)  
+- Floor 2: Zone 4 (Office Block A), Zone 5 (Conference Room A), Zone 6 (Office Block B + Lab)
+- Floor 3: Zone 7 (Research Lab), Zone 8 (Management Floor), Zone 9 (Rooftop/Utilities)
+
+Current status: Online zones: ${[...onlineZones].join(', ')||'none'} | Alerting zones: ${[...alertingZones].join(', ')||'none'}
+
+Respond concisely (max 120 words). Give actionable recommendations. Format with clear zone names. For zone recommendations, prefix with ▶.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: query }],
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || 'No response.';
+    area.innerHTML = `<div class="ai-panel"><div class="ai-panel-header">✦ AI ANALYSIS</div><div class="ai-response">${escHtml(text)}</div></div>`;
+    addLog('ai','AI ADVISORY',query.slice(0,60));
+  } catch(e) {
+    area.innerHTML = `<div class="ai-panel"><div class="ai-response" style="color:var(--red)">AI unavailable. ${e.message}</div></div>`;
+  }
+}
+
+async function aiGenerateMessage() {
+  const activeZoneNames = [...selectedZones].map(id => ZONES.find(z=>z.id===id)?.desc || id).join(', ');
+  const btn = document.querySelector('button[onclick="aiGenerateMessage()"]');
+  btn.textContent = '✦ GENERATING...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 150,
+        messages: [{
+          role: 'user',
+          content: `Write a concise, clear emergency announcement (max 40 words) for a ${selectedType} alert with severity level ${severity}/3. Target zones: ${activeZoneNames || 'all zones'}. Be direct and actionable. Return ONLY the message text.`
+        }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text?.trim() || '';
+    if (text) document.getElementById('alertMsg').value = text;
+    addLog('ai','AI MESSAGE GENERATED',`Type: ${selectedType} · Severity: ${severity}`);
+  } catch(e) {
+    addLog('warn','AI GENERATE FAILED', e.message);
+  } finally {
+    btn.innerHTML = '<span style="color:var(--blue)">✦</span> AI GENERATE';
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  LOG
+// ══════════════════════════════════════════════════════
+function addLog(type, title, detail) {
+  const panel = document.getElementById('logPanel');
+  const item  = document.createElement('div');
+  const cls   = {alert:'log-alert', ok:'log-ok', info:'log-info', ai:'log-ai', warn:'log-warn'}[type] || 'log-info';
+  item.className = `log-item ${cls}`;
+  item.innerHTML = `<div class="log-time">${new Date().toTimeString().slice(0,8)}</div><div class="log-title">${escHtml(title)}</div>${detail?`<div class="log-detail">${escHtml(detail)}</div>`:''}`;
+  panel.insertBefore(item, panel.firstChild);
+}
+function clearLog() { document.getElementById('logPanel').innerHTML = ''; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ══════════════════════════════════════════════════════
+//  COUNTERS + THREAT
+// ══════════════════════════════════════════════════════
+function updateCounters() {
+  document.getElementById('mOnline').textContent   = onlineZones.size;
+  document.getElementById('mAlerting').textContent = alertingZones.size;
+}
+function setThreat(level) {
+  const el = document.getElementById('threatLevel');
+  el.textContent = level;
+  el.className = 'threat-level ' + level;
+}
+
+// ══════════════════════════════════════════════════════
+//  EFFECTS
+// ══════════════════════════════════════════════════════
+function flashScreen() {
+  const el = document.getElementById('flash');
+  el.classList.remove('pop');
+  void el.offsetWidth;
+  el.classList.add('pop');
+}
+function showBanner(text) {
+  const b = document.getElementById('emergencyBanner');
+  b.textContent = text;
+  b.classList.add('show');
+}
+function hideBanner() { document.getElementById('emergencyBanner').classList.remove('show'); }
+
+// ══════════════════════════════════════════════════════
+//  SIMULATED HEARTBEATS (demo without real hardware)
+// ══════════════════════════════════════════════════════
+function simulateHeartbeats() {
+  setInterval(() => {
+    if (mqttConnected) return; // Only simulate if no real MQTT
+    const onlineIds = ['zone_1','zone_2','zone_4','zone_5','zone_6','zone_8'];
+    // Randomly toggle one zone online/offline for realism
+    const flip = ZONES[Math.floor(Math.random()*ZONES.length)].id;
+    if (Math.random() > 0.85) {
+      if (onlineZones.has(flip)) onlineZones.delete(flip);
+      else onlineZones.add(flip);
+      renderZoneList(); updateSVGZones(); updateCounters();
+    }
+  }, 8000);
+  updateCounters();
+}
+
+// ══════════════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'Enter') broadcastAlert();
+  if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selAll(); }
+  if (e.key === 'Escape') { selNone(); hideBanner(); }
+});
+</script>
+</body>
+</html>
